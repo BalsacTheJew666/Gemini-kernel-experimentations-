@@ -1,0 +1,92 @@
+name: Build XT2615-1 Kernel with SUSFS
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Kernel source branch or tag'
+        required: true
+        default: 'android-16-release'
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Free Up Disk Space
+        run: |
+          echo "=== Purging obsolete packages and heavy tools ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeCoverage
+          sudo rm -rf /usr/local/share/boost
+          
+          # Remove heavy pre-installed packages to free up space
+          sudo apt-get purge -y \
+            google-cloud-cli \
+            microsoft-edge-stable \
+            google-chrome-stable \
+            firefox \
+            dotnet-sdk-* \
+            php-* \
+            mysql-* \
+            postgresql-* \
+            mongodb-* \
+            libgl1-mesa-dri
+            
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          
+          echo "Available disk space after cleanup:"
+          df -h
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git gnupg gperf imagemagick lib32ncurses5-dev lib32z1-dev libelf-dev \
+            libssl-dev libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
+            xsltproc yasm zlib1g-dev libncurses5-dev python3 make unzip wget
+
+      - name: Clone Kernel Source
+        run: |
+          echo "Cloning kernel source for XT2615-1 (Nevada)..."
+          # Replace with your actual target kernel repository URL if custom
+          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-mtk.git -b ${{ github.event.inputs.branch }} kernel-source
+          
+          cd kernel-source
+          
+          # --- Integration Placeholder for KernelSU & SUSFS ---
+          # Example:
+          # curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+          # Apply your specific SUSFS patches here to the kernel tree
+          
+      - name: Compile Kernel
+        run: |
+          cd kernel-source
+          export ARCH=arm64
+          export SUBARCH=arm64
+          
+          echo "Configuring and starting kernel compilation..."
+          # Replace 'defconfig' with your device's specific vendor config file name
+          make defconfig
+          make -j$(nproc) Image.gz-dtb
+          
+      - name: Verify Build Output
+        run: |
+          echo "Verifying compiled kernel artifacts..."
+          cd kernel-source
+          
+          # Check if the generated kernel binary exists
+          if [ -f "arch/arm64/boot/Image.gz-dtb" ] || [ -f "arch/arm64/boot/Image" ]; then
+            echo "SUCCESS: Kernel compiled and verified successfully!"
+            ls -lh arch/arm64/boot/Image*
+          else
+            echo "ERROR: Kernel image verification failed. File not found."
+            exit 1
+          fi
+          
